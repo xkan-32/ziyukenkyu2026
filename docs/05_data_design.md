@@ -16,6 +16,7 @@
 
 - ある時点の観測スナップショット
 - AI 判断の主要入力
+- 定期観測や decision window の基準観測を保存する
 
 ### 主なフィールド
 
@@ -29,6 +30,7 @@
 - `weather_summary`
 - `observation_type`
   - `scheduled`
+  - `decision_window`
   - `post_watering`
   - `manual`
 
@@ -62,6 +64,7 @@
 ### 責務
 
 - AI がどの観測を見て、どう判断したかを残す
+- 判断時刻以外の定期土壌水分ログには直接ひも付けない
 
 ### 主なフィールド
 
@@ -72,6 +75,7 @@
 - `reason`
 - `confidence`
 - `decision_status`
+- `decision_window`
 
 ### JSON例
 
@@ -85,6 +89,7 @@
   "action": "water",
   "water_amount_ml": 35,
   "requested_duration_ms": 3200,
+  "decision_window": "morning",
   "reason": "土壌水分が低く、葉の張りも弱い",
   "confidence": 0.85,
   "decision_status": "proposed",
@@ -190,15 +195,18 @@
 ### 責務
 
 - 水やり効果測定を含む土壌水分の時系列ログ
+- 定期観測で取得した土壌水分のみのログを保存する
+- 判断時刻以外の土壌水分ログは、AI 判断に直結せず、履歴・分析・データレイクとして利用する
 
 ### 主なフィールド
 
 - `watering_event_id`
 - `read_at`
 - `measurement_phase`
-  - `baseline`
+  - `decision_baseline`
   - `post_watering`
-  - `normal_hourly`
+  - `normal_periodic`
+  - `manual_check`
 - `minutes_after_watering`
 - `sequence_no`
 
@@ -223,6 +231,13 @@
 
 - `watering_event_id + read_at asc`
 - `planter_profile_id + read_at desc`
+
+### 保存方針
+
+- 画像・天気・土壌水分を含む観測スナップショットは `observations`
+- 土壌水分のみの時系列ログは `soil_moisture_readings`
+- 水やり後 5 分間隔の効果測定も `soil_moisture_readings`
+- AI 判断に使った観測は `ai_decisions.observation_id` で参照する
 
 ## 5. watering_effect_analyses
 

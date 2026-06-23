@@ -14,8 +14,10 @@
 - 観測データの組み立て
 - Cloud Storage / Firestore / Cloud Run への送信
 - 通常時 1 時間ごとの観測スケジュール
+- 定期観測で Arduino の `read` を呼び、土壌水分 raw / percent を取得して保存する
 - 水やり後 5 分間隔の高頻度測定スケジュール
 - ネットワーク断時のローカル一時保存と再送
+- 朝・夕方の decision window でのみ AI 判断を起動する
 
 # Arduinoの役割
 
@@ -26,6 +28,7 @@
 - 1 日の累積開放時間上限の強制
 - 起動時、異常時、通信断時のバルブ閉
 - Raspberry Pi への構造化レスポンス返却
+- AI 判断は行わず、受け取った `water <duration_ms>` の安全実行可否だけを判定する
 
 # GCPの役割
 
@@ -48,6 +51,7 @@
 
 - Raspberry Pi は「何をしたいか」を決めた結果を中継する
 - Arduino は「それを安全に実行してよいか」を最終判断する
+- 定期観測の `read` はデータ蓄積目的であり、その場で自動水やりを起動しない
 - mL から秒数への換算は初期実装では Raspberry Pi で行い、Arduino には開放時間を送る
 - 理由
   - 校正や土・流量設定は Raspberry Pi / クラウド側で柔軟に変えたい
@@ -69,13 +73,17 @@
 2. Arduino から土壌水分値を取得する
 3. 必要なら天気 API から気象情報を取得する
 4. 画像を GCS に保存し、観測レコードを Firestore に保存する
+5. この定期観測はデータ蓄積目的であり、水やり実行の直接トリガーにはしない
 
 ## AI判断フロー
 
-1. `observations` と直近履歴を agent-api に送る
-2. Gemini が JSON で判断を返す
-3. `ai_decisions` に保存する
-4. 行動は `water`、`observe_only`、`manual_review` などで表現する
+1. 原則として朝・夕方の decision window でのみ実行する
+2. `observations` と直近履歴を agent-api に送る
+3. Gemini が JSON で判断を返す
+4. `ai_decisions` に保存する
+5. 行動は `water`、`observe_only`、`manual_review` などで表現する
+6. 判断時刻以外の観測では `POST /judge` を呼ばない
+7. 将来的に緊急レビュー用 alert は検討可能だが、初期実装では自動水やりに直結させない
 
 ## 自動水やりフロー
 

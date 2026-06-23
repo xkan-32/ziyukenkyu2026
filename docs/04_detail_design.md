@@ -15,13 +15,24 @@
 
 ## 通常観測シーケンス
 
-1. 画像を撮影
-2. サムネイルまたは縮小版を生成
-3. Arduino から土壌水分値を取得
-4. 天気を取得
-5. 画像を GCS へ保存
-6. `observations` を保存
-7. 観測保存後、必要に応じて `POST /judge` を呼ぶ
+1. Raspberry Pi が現在時刻を確認する
+2. カメラ撮影が必要な観測タイミングなら画像を撮影する
+3. Arduino に `read` を送り、土壌水分 raw / percent を取得する
+4. 必要なら天気を取得する
+5. `observations` または `soil_moisture_readings` に保存する
+6. 通常観測では水やりを実行しない
+
+## AI判断シーケンス
+
+1. 朝・夕方の decision window でのみ実行する
+2. 最新の観測、直近履歴、画像、天気を agent-api の `POST /judge` に送る
+3. AI が `water`、`observe_only`、`manual_review` などを JSON で返す
+4. `ai_decisions` に保存する
+5. `action=water` の場合のみ、Raspberry Pi が mL を duration_ms に変換する
+6. Raspberry Pi が Arduino に `water <duration_ms>` を送る
+7. Arduino が wet 判定、単回上限、日次上限で安全判定する
+8. 実行結果または拒否結果を `watering_events` に保存する
+9. 成功時のみ、水やり後 5 分間隔の効果測定を開始する
 
 ## 水やりシーケンス
 
@@ -30,6 +41,13 @@
 3. `water <duration_ms>` を Arduino に送る
 4. レスポンスを `watering_events` に保存する
 5. `status=success` のときだけ高頻度測定を開始する
+
+## 定期土壌水分測定シーケンス
+
+1. Raspberry Pi が一定間隔で Arduino に `read` を送る
+2. 土壌水分 raw / percent を取得する
+3. データ蓄積目的で保存する
+4. 乾燥していても、このシーケンス単独では水やりしない
 
 ## オフライン時の扱い
 
@@ -54,6 +72,10 @@
 - `close`
   - バルブを強制閉止する
 
+初期実装では 1 行 1 コマンドの平文入力に対して、1 行 JSON を返す。
+`water` は `duration_ms` の形式チェック後に土壌水分を再読取し、wet 判定、単回上限、24 時間累積上限の順で安全判定する。
+累積上限は RTC 未導入のため Arduino 起動後 24 時間窓で管理する。
+
 ## 返却 JSON 例
 
 ```json
@@ -67,6 +89,19 @@
   "message": "watered"
 }
 ```
+
+`status` は次を返す。
+
+- `uptime_ms`
+- `valve_open`
+- `dry_run`
+- `daily_watered_ms`
+- `max_single_water_ms`
+- `max_daily_water_ms`
+- `wet_reject_percent`
+- `soil_moisture_raw`
+- `soil_moisture_percent`
+- `is_wet`
 
 ## 安全ロジック優先順
 

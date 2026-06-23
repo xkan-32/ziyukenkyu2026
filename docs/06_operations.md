@@ -5,7 +5,11 @@
 # 日次運用
 
 - 観測データが 1 時間ごとに記録されているか確認する
+- 通常時は定期的に土壌水分が記録されているか確認する
+- 朝・夕方の AI 判断が実行されたか確認する
+- 判断時刻以外の乾燥値だけで水やりが実行されていないことを確認する
 - 水やりイベントがあった場合、効果測定 12 件がそろっているか確認する
+- 水やりが実行された場合のみ、5 分間隔の効果測定が始まることを確認する
 - Raspberry Pi / Arduino の稼働状態を確認する
 - 異常イベント
   - 安全拒否
@@ -41,6 +45,7 @@
 - 1 時間後に通常観測へ戻ったか確認する
 - 原則 12 件の高頻度測定がそろったか確認する
 - 土壌水分が不自然に上がり続けていないか確認する
+- 判断時刻以外の定期観測だけでは `watering_events` が増えていないことを確認する
 
 # 収穫時の作業
 
@@ -54,12 +59,15 @@
 - 乾燥時と飽水時の値を記録する
 - `calibration_profiles` に保存する
 - 校正値を Arduino と Raspberry Pi の両方で参照できる形にする
+- Arduino 初期実装では `edge/arduino/valve_controller/config.h` の `SOIL_SENSOR_DRY_RAW` と `SOIL_SENSOR_WET_RAW` を手動更新する
+- Arduino 側は `SENSOR_READ_SAMPLES` 回の平均値で判定するため、校正時も数回読んだ平均を基準に確認する
 
 # バルブ流量測定
 
 - `tools/measure_valve_flow.py` を使う
 - 開放時間ごとの実測 mL を取り、線形近似またはテーブル化する
 - `calibration_profiles.flow_rate_ml_per_sec` に保存する
+- 実バルブ接続前は Arduino を `DRY_RUN_MODE=true` にして、`read`、`status`、`close`、`water 1000` をシリアルで机上試験する
 
 # 障害時運用
 
