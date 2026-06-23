@@ -1,0 +1,12 @@
+[
+  {
+    "id": "obs_sample_001",
+    "cultivation_group": "ai",
+    "observed_at": "2026-06-22T12:00:00+09:00",
+    "image_gcs_path": "gs://komatsuna-ai-agent-dev/images/ai/sample/001.jpg",
+    "soil_moisture_percent": 42.5,
+    "temperature_c": 26.3,
+    "humidity_percent": 55.0,
+    "notes": "サンプル観測データ"
+  }
+]

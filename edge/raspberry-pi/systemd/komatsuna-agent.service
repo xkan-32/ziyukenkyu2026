@@ -1,0 +1,12 @@
+[Unit]
+Description=Komatsuna AI Agent - Raspberry Pi observation service
+After=network.target
+
+[Service]
+Type=oneshot
+# TODO: 実行ユーザー・パスを環境に合わせて設定
+ExecStart=/usr/bin/python3 /opt/komatsuna-agent/app/main.py
+WorkingDirectory=/opt/komatsuna-agent
+
+[Install]
+WantedBy=multi-user.target

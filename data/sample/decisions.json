@@ -1,0 +1,13 @@
+[
+  {
+    "id": "dec_sample_001",
+    "cultivation_group": "ai",
+    "decided_at": "2026-06-22T12:05:00+09:00",
+    "observation_id": "obs_sample_001",
+    "action": "water",
+    "water_duration_sec": 5,
+    "reason": "土壌水分が閾値を下回っている",
+    "confidence": 0.85,
+    "model": "gemini-2.0-flash"
+  }
+]

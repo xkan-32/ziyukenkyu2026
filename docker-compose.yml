@@ -1,0 +1,17 @@
+# ローカル開発用（agent-api のみ）
+# 本番は Cloud Run + GCP マネージドサービスを利用
+
+services:
+  agent-api:
+    build:
+      context: ./services/agent-api
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - PORT=8080
+    volumes:
+      - ./services/agent-api/app:/app/app:ro
+    restart: unless-stopped

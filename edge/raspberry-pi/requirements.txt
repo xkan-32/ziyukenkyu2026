@@ -1,0 +1,6 @@
+pyserial
+google-cloud-firestore
+google-cloud-storage
+python-dotenv
+requests
+Pillow
