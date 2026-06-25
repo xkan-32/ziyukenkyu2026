@@ -38,7 +38,14 @@ if printf '%s\n' "$list_output" | awk -v busid="$busid" '$1 == busid && /Not sha
   exit 1
 fi
 
-powershell.exe -NoProfile -Command "& '$USBIPD_WIN' attach --wsl --busid $busid" >/dev/null
+attach_output="$(powershell.exe -NoProfile -Command "& '$USBIPD_WIN' attach --wsl --busid $busid" 2>&1)" || {
+  if printf '%s\n' "$attach_output" | grep -F "already attached to a client" >/dev/null 2>&1; then
+    :
+  else
+    echo "$attach_output" >&2
+    exit 1
+  fi
+}
 
 for _ in $(seq 1 20); do
   if ls /dev/ttyACM* /dev/ttyUSB* >/dev/null 2>&1; then
