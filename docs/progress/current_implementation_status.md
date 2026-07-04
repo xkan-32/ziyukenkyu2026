@@ -15,6 +15,7 @@
   - ドキュメント上の設計思想は一貫している
   - 現時点で実装が最も進んでいるのは Arduino
   - Raspberry Pi / GCP / AI は多くが骨格またはプレースホルダー段階
+  - 次フェーズは Raspberry Pi 観測基盤の初期実装であり、自動散水本番化はまだ次段階
 
 ## 2. 現在の実装範囲
 
@@ -160,33 +161,34 @@
   - GCP / API URL 用の環境変数定義あり
 - systemd service/timer の雛形あり
 
-### 4.2 未実装機能
+### 4.2 実装済み機能
 
-- `read/status/close` の Python クライアント: 未実装
-  - `app/arduino/serial_client.py` は TODO
-  - `app/arduino/commands.py` は TODO
-- ローカル JSONL 保存: 未実装
-  - `storage/local_jsonl_store.py` は存在しない
-- 定期スケジューラ本体: 未実装
-  - `app/scheduler/observation_scheduler.py` は TODO
-  - `app/scheduler/post_watering_scheduler.py` は TODO
-- カメラ撮影: 未実装
-  - `app/camera/capture.py` は TODO
-  - `app/camera/image_resize.py` は TODO
-- GCP 同期: 未実装
-  - `app/gcp/firestore_sync.py` は TODO
-  - `app/gcp/storage_upload.py` は TODO
-  - `app/gcp/agent_api_client.py` は TODO
-- `water` 自動実行: 未実装
-  - `app/main.py` はプレースホルダーで、コメントのみ
-- `allow_water_command_from_pi` 設定
-  - そのような設定項目は現時点では見当たらない
+- `read/status/close` の Python クライアント
+  - `app/arduino/serial_client.py`
+  - `app/arduino/commands.py`
+- ローカル JSONL 保存
+  - `app/storage/local_jsonl_store.py`
+  - `app/storage/local_queue_store.py`
+- 定期スケジューラ本体
+  - `app/scheduler/observation_scheduler.py`
+  - `app/scheduler/post_watering_scheduler.py` は TODO コメントのみ
+- カメラ撮影とリサイズ
+  - `app/camera/capture.py`
+  - `app/camera/image_resize.py`
+  - `app/camera/mock_capture.py`
+- GCP 同期の骨格
+  - `app/gcp/firestore_sync.py`
+  - `app/gcp/storage_upload.py`
+  - `app/gcp/agent_api_client.py`
+- `water` 自動実行は未実装のまま維持
+  - `app/main.py` は観測 1 サイクル専用 CLI
+- `ALLOW_WATER_COMMAND_FROM_PI=false` を既定値として実装
 
 ### 4.3 現時点の位置づけ
 
-- Raspberry Pi 側は「構成と責務の骨格はあるが、本体処理はまだ未実装」
-- 現時点では観測係としても、実行係としても本番機能は未完成
-- 設計思想の破綻はないが、実装進捗は初期段階
+- Raspberry Pi 側は「観測基盤の初期実装」まで完了
+- dry-run での 1 サイクル観測、JSONL 保存、画像生成、ローカルキュー退避を確認済み
+- GCP 実接続と Pi 実機デプロイは次段階
 
 ## 5. GCP / Cloud Run / Firestore / GCS 実装状況
 
@@ -226,7 +228,7 @@
   - Gemini クライアントは TODO
 - 要確認
   - `line_webhook`、`human_task`、`verify_human_task` など、設計書の中心スコープより広い名前のファイルが存在する
-  - 実装は進んでいないが、今後スコープ拡大につながらないかは要確認
+  - ただし現状はいずれも未使用で、初期スコープでは使わない旨の注記がコード内にある
 
 ## 7. データ保存・ログ設計との対応
 
@@ -277,9 +279,10 @@
 | 起動時・異常時に閉じる | 閉側へ倒す | boot で `closeValve()` 実装 | OK | USB 抜去等は未テスト |
 | Raspberry Piはまず観測係である | 観測・通信・スケジュール担当 | 骨格のみ、実処理未実装 | 未実装 | 設計違反ではない |
 | AI判断は朝・夕方のみの想定 | decision window のみ | ドキュメントでは明記、実装未着手 | 未実装 | 実装時に要維持 |
-| 人間側データを保存しない | システム外管理 | ドキュメント上は維持 | OK | ただし human_task 系ファイル名は要確認 |
+| 人間側データを保存しない | システム外管理 | ドキュメント上は維持 | OK | human_task 系は将来用として未使用に固定する |
 | 水道接続前に安全確認する | 先に dry-run / 電気試験 | 実機手順どおり実施 | OK | 水道接続は未実施 |
 | GCP/AIは未実装なら未実装として扱う | 過大主張しない | 現状は雛形中心 | OK | `/health` 以外は未完成 |
+| Raspberry Pi 初期実装は観測基盤に限定する | 観測・通信・ローカル保存を先行 | 実装は未着手 | 未実装 | `water` 自動実行は初期スコープ外 |
 
 ## 10. 現時点のリスク・注意点
 
@@ -291,6 +294,7 @@
 - 12V 系と Arduino 5V 系の混同に注意
 - 緊急時は手動バルブと 12V 電源遮断が優先
 - `DRY_RUN_MODE=true` が現在値なので、実機再試験時は意図せず実バルブが動かない可能性に注意
+- `ALLOW_WATER_COMMAND_FROM_PI` はまだ未実装であり、Pi 実装時に既定無効で追加する必要がある
 - `tools/attach_arduino_usb.sh` は WSL2 用の補助スクリプト修正が入っている
 
 ## 11. 次に実装すべきこと
@@ -299,30 +303,23 @@
    - 現状: ファイルはあるが未実装
 2. `read/status/close` の Python クライアント
    - 現状: 未実装
-3. 土壌水分のローカル JSONL 保存
+3. ローカル JSONL 保存
    - 現状: 未実装、対象ファイルも未作成
-4. 定期観測スケジューラ
+4. カメラ撮影・リサイズ
    - 現状: TODO
-5. カメラ撮影
+5. 定期観測スケジューラ
    - 現状: TODO
-6. 流量測定
-   - 現状: 未実施
-7. GCP 最小構成
-   - 現状: FastAPI `/health` と Terraform 雛形のみ
-8. AI 判断 API
-   - 現状: ルーター雛形のみ
-9. AI 判断に基づく水やり実行
+6. GCP 送信失敗時のローカル退避と再送キュー
+   - 現状: 設計のみ
+7. `ALLOW_WATER_COMMAND_FROM_PI=false` を既定とする安全フラグ追加
    - 現状: 未実装
-10. 水やり後の効果測定
+8. 流量測定
+   - 現状: 未実施
+9. GCP 最小構成
+   - 現状: FastAPI `/health` と Terraform 雛形のみ
+10. AI 判断 API
+   - 現状: ルーター雛形のみ
+11. AI 判断に基づく水やり実行の解禁条件整理
+   - 現状: 校正・安全試験が未完了のため着手しても本番無効の前提
+12. 水やり後の効果測定
    - 現状: 設計のみ、スケジューラ TODO
-
-## 12. ChatGPTに確認してほしいポイント
-
-- 現在の Arduino 実装は設計思想と矛盾していないか
-- Arduino 側に判断ロジックが入りすぎていないか
-- Raspberry Pi 初期実装の範囲は妥当か
-- 観測と判断の分離がドキュメント上十分明確か
-- GCP / AI の未実装範囲の切り方は妥当か
-- `human_task` / `line_webhook` 系のファイル名は初期スコープに対して広すぎないか
-- wet 閾値の暫定運用と校正前提の説明は十分か
-- 次に実装すべき順番に問題がないか

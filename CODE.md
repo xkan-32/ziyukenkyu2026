@@ -71,20 +71,30 @@
 2. Arduino 単体安全制御の確立
 3. ソレノイド開閉テストと物理安全確認
 4. 土壌水分センサー校正
-5. Raspberry Pi カメラ撮影
-6. Raspberry Pi-Arduino USB 通信
-7. Raspberry Pi のローカル観測スケジューラ
-8. GCP 最小構成の Terraform 化
-9. Cloud Run `GET /health`
-10. Cloud Storage 画像アップロード
-11. Firestore 観測保存
-12. Gemini による `POST /judge`
-13. 自動水やり実行と `watering_events` 記録
-14. 水やり後効果測定スケジューラと `soil_moisture_readings`
-15. 水やり効果分析 API
-16. 第 2 回戦改善案生成
-17. 日次サマリー生成
-18. 研究データエクスポート
+5. Raspberry Pi 観測基盤の初期実装
+6. GCP 最小構成の Terraform 化
+7. Cloud Run `GET /health`
+8. Cloud Storage 画像アップロード
+9. Firestore 観測保存
+10. Gemini による `POST /judge`
+11. 自動水やり解禁前の安全ゲート完了
+12. 自動水やり実行と `watering_events` 記録
+13. 水やり後効果測定スケジューラと `soil_moisture_readings`
+14. 水やり効果分析 API
+15. 第 2 回戦改善案生成
+16. 日次サマリー生成
+17. 研究データエクスポート
+
+Raspberry Pi 観測基盤の初期実装に含めるのは次の範囲です。
+
+- Arduino USB シリアル通信
+- `read` / `status` / `close` の Python クライアント
+- ローカル JSONL 保存
+- カメラ撮影・リサイズ
+- 通常観測スケジューラ
+- GCP 送信失敗時のローカル退避
+
+初期実装では `water` 自動実行を本番無効とします。流量測定、wet 閾値の実土壌校正、水道接続前安全試験が完了するまで、AI 判断に基づく `water` 実行と本番散水は解禁しません。
 
 ## 6. Testing Strategy
 
@@ -92,6 +102,7 @@
   - `read`、`water`、異常コマンド、wet 拒否、最大開放時間制限を机上試験する
 - Raspberry Pi
   - カメラ未接続、Arduino 無応答、ネットワーク断、再送キューを試験する
+  - `ALLOW_WATER_COMMAND_FROM_PI=false` を既定として、観測だけを先に回せることを確認する
 - agent-api
   - スキーマ検証、プロンプト出力 JSON 検証、Firestore/GCS 依存のモック試験を行う
 - local queue
@@ -109,11 +120,14 @@
 - 流量調整バルブで最大流量を絞っているか
 - 常時閉ソレノイドバルブを使用しているか
 - 12V 電源容量が十分か
+- `ALLOW_WATER_COMMAND_FROM_PI` が意図した値か
+- `DRY_RUN_MODE` が意図した値か
 - 5V 系と 12V 系が分離されているか
 - Raspberry Pi と Arduino が防水ボックス内に収まっているか
 - 起動時にバルブ閉ログを確認したか
 - 1 回の最大開放時間と 1 日の最大開放時間を設定したか
 - `wet` 判定閾値と校正値が最新か
+- 流量係数が測定済みか
 - 実験外時間に手動バルブを閉じる運用を徹底しているか
 
 ## 8. Coding Guidelines

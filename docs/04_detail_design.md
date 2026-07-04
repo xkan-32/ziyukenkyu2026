@@ -13,14 +13,28 @@
 - `scheduler/post_watering_scheduler.py`
   - 水やり後 5 分間隔測定
 
+## Raspberry Pi 初期実装フェーズ
+
+初期実装フェーズでは Raspberry Pi を観測基盤として先に完成させる。対象は次に限定する。
+
+- Arduino USB シリアル通信
+- `read` / `status` / `close` の Python クライアント
+- ローカル JSONL 保存
+- カメラ撮影・リサイズ
+- 通常観測スケジューラ
+- GCP 送信失敗時のローカル退避
+
+初期フェーズでは AI 判断に基づく `water` 自動実行、水道接続した本番散水、水やり後の本番効果測定運用は解禁しない。
+
 ## 通常観測シーケンス
 
 1. Raspberry Pi が現在時刻を確認する
 2. カメラ撮影が必要な観測タイミングなら画像を撮影する
 3. Arduino に `read` を送り、土壌水分 raw / percent を取得する
 4. 必要なら天気を取得する
-5. `observations` または `soil_moisture_readings` に保存する
-6. 通常観測では水やりを実行しない
+5. 送信前にローカル JSONL へ保存する
+6. GCP 送信に成功したら Firestore / GCS へ反映する
+7. 通常観測では水やりを実行しない
 
 ## AI判断シーケンス
 
@@ -29,18 +43,21 @@
 3. AI が `water`、`observe_only`、`manual_review` などを JSON で返す
 4. `ai_decisions` に保存する
 5. `action=water` の場合のみ、Raspberry Pi が mL を duration_ms に変換する
-6. Raspberry Pi が Arduino に `water <duration_ms>` を送る
-7. Arduino が wet 判定、単回上限、日次上限で安全判定する
-8. 実行結果または拒否結果を `watering_events` に保存する
-9. 成功時のみ、水やり後 5 分間隔の効果測定を開始する
+6. `ALLOW_WATER_COMMAND_FROM_PI=false` の間はここで停止し、提案だけを保存する
+7. 明示設定で許可された場合のみ Raspberry Pi が Arduino に `water <duration_ms>` を送る
+8. Arduino が wet 判定、単回上限、日次上限で安全判定する
+9. 実行結果または拒否結果を `watering_events` に保存する
+10. 成功時のみ、水やり後 5 分間隔の効果測定を開始する
 
 ## 水やりシーケンス
 
 1. `ai_decisions` の提案 mL を受け取る
 2. ローカル校正値で mL -> ms に換算する
-3. `water <duration_ms>` を Arduino に送る
-4. レスポンスを `watering_events` に保存する
-5. `status=success` のときだけ高頻度測定を開始する
+3. Raspberry Pi 側でも最大許容時間を上限として適用する
+4. `ALLOW_WATER_COMMAND_FROM_PI=false` なら送信せず、提案保存で終了する
+5. `ALLOW_WATER_COMMAND_FROM_PI=true` のときだけ `water <duration_ms>` を Arduino に送る
+6. レスポンスを `watering_events` に保存する
+7. `status=success` のときだけ高頻度測定を開始する
 
 ## 定期土壌水分測定シーケンス
 
@@ -52,11 +69,16 @@
 ## オフライン時の扱い
 
 - GCP 送信失敗時はローカルキューへ書く
+- すべての送信対象は送信前にローカル JSONL へ追記する
 - キュー対象
   - observation
   - watering_event
   - soil_moisture_reading
   - weather_log
+- 初期スコープ外
+  - human_task
+  - verify_human_task
+  - line_webhook
 - 再送時は元の `occurred_at` を保持し、送信時刻を別フィールドに入れる
 
 # Arduino処理詳細
@@ -75,6 +97,7 @@
 初期実装では 1 行 1 コマンドの平文入力に対して、1 行 JSON を返す。
 `water` は `duration_ms` の形式チェック後に土壌水分を再読取し、wet 判定、単回上限、24 時間累積上限の順で安全判定する。
 累積上限は RTC 未導入のため Arduino 起動後 24 時間窓で管理する。
+Arduino は水やり要否を判断せず、`water` 命令の安全実行可否だけを判定する。
 
 ## 返却 JSON 例
 
@@ -160,6 +183,15 @@
   - リトライ後も不可なら `decision_status=pending_manual_review`
 - Firestore 保存失敗
   - ローカルキューへ退避する
+
+# 設定フラグ案
+
+- `ALLOW_WATER_COMMAND_FROM_PI=false`
+  - Raspberry Pi から Arduino への `water` コマンド送信を既定で禁止する安全フラグ
+  - 初期実装では明示的に `true` にしない限り、自動散水は実行しない
+- `DRY_RUN_MODE=true`
+  - Arduino 側で実バルブを開かずに机上試験する
+  - 実機モードへ切り替える場合も、`ALLOW_WATER_COMMAND_FROM_PI` とは独立に確認する
 
 # 状態遷移
 

@@ -14,6 +14,8 @@
 - 余計な説明文や Markdown を禁止する
 - 不確実な場合は推測で断定せず、`unable_to_determine` 系の値を返す
 - 理由フィールドは短すぎず、後で人が読んで判断経緯を追える長さにする
+- AI の出力は栽培上の提案であり、直接バルブ制御に使わない
+- `action=water` が返っても、Raspberry Pi 側の安全フラグ、mL -> ms 変換上限、Arduino の安全判定を通るまで実行しない
 
 # 1. 栽培判断プロンプト
 
@@ -31,6 +33,13 @@
   "confidence": 0.85
 }
 ```
+
+`action` の候補は次を基本とする。
+
+- `water`
+- `observe_only`
+- `manual_review`
+- `unable_to_determine`
 
 # 2. 水やり判断プロンプト
 
@@ -114,3 +123,5 @@
 - JSON バリデーション失敗時の再プロンプト戦略を `usecases/` 側で持つ
 - モデル更新時は、期待 JSON が崩れていないかサンプルで確認する
 - 人間側の入力やシステム内報告フローを前提にしたプロンプトは初期スコープから外す
+- `action=water` を返しても、Raspberry Pi 側では `ALLOW_WATER_COMMAND_FROM_PI=false` の間は提案保存のみ行う
+- 実行時も mL -> ms の変換上限、Arduino の wet 判定、単回上限、日次上限を通過しない限り通水しない

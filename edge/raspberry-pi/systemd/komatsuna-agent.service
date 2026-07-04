@@ -4,9 +4,10 @@ After=network.target
 
 [Service]
 Type=oneshot
-# TODO: 実行ユーザー・パスを環境に合わせて設定
-ExecStart=/usr/bin/python3 /opt/komatsuna-agent/app/main.py
-WorkingDirectory=/opt/komatsuna-agent
+# git clone 先: ~/komatsuna-ai-agent（Pi ユーザー: kansei → .ssh-env 参照）
+WorkingDirectory=/home/kansei/komatsuna-ai-agent/edge/raspberry-pi
+EnvironmentFile=/home/kansei/komatsuna-ai-agent/edge/raspberry-pi/.env
+ExecStart=/home/kansei/komatsuna-ai-agent/edge/raspberry-pi/.venv/bin/python -m app.main once
 
 [Install]
 WantedBy=multi-user.target

@@ -79,6 +79,9 @@ Desktop.ini
 # データ・ログ（エクスポート成果物は追跡しない想定）
 data/exports/*
 !data/exports/.gitkeep
+edge/raspberry-pi/data/local/
+edge/raspberry-pi/pytest-cache-files-*/
+edge/raspberry-pi/.ssh-env
 *.log
 tmp/
 temp/

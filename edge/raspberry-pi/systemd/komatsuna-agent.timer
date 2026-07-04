@@ -3,8 +3,7 @@ Description=Komatsuna AI Agent - periodic observation timer
 Requires=komatsuna-agent.service
 
 [Timer]
-# TODO: 観測間隔を設定（通常時は1時間ごとなど）
-OnCalendar=*:0/60
+OnCalendar=hourly
 Persistent=true
 
 [Install]

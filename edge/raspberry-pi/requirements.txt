@@ -4,3 +4,4 @@ google-cloud-storage
 python-dotenv
 requests
 Pillow
+pytest
