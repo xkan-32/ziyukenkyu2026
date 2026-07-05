@@ -1,6 +1,6 @@
 # 実機確認ログ
 
-- 実施日: 2026-06-25
+- 実施日: 2026-06-25, 2026-07-05
 - 使用ボード: Arduino UNO R4 WiFi
 - 接続構成: 土壌水分センサー + MOSFETモジュール + 12V 常時閉ソレノイドバルブ
 
@@ -34,6 +34,11 @@
 - 電磁バルブは `water` 実行時だけ「カチッ」と動作したことをユーザーが確認
 - `water 100000` は `actual_duration_ms=5000` に切り詰め
 - 不正コマンドは拒否され、`valve_open=false` のまま
+- Raspberry Pi からの USB シリアル経由でも `status` / `read` / `close` / `water` が成功
+- センサー乾燥時は `soil_moisture_raw=464-469`、`soil_moisture_percent=1.4-3.7`
+- センサー湿潤時は `soil_moisture_raw=152`、`soil_moisture_percent=100.0`
+- 湿潤状態での `water 300` は `rejected_by_safety / soil_too_wet` で拒否
+- `daily_watered_ms` は 300ms テスト後に 300、`water 100000` 後に 5300 相当へ増加
 
 代表レスポンス:
 
@@ -43,6 +48,10 @@
 {"status":"ok","command":"water","moisture_before_percent":0.0,"moisture_after_percent":0.5,"requested_duration_ms":100000,"actual_duration_ms":5000,"applied_limit":true,"dry_run":false,"message":"watered_with_limit"}
 {"status":"error","command":"unknown","reason":"unknown_command","valve_open":false,"message":"rejected"}
 {"status":"error","command":"water","reason":"invalid_duration_ms","valve_open":false,"message":"rejected"}
+{"status":"ok","command":"status","uptime_ms":106382,"valve_open":false,"dry_run":false,"daily_watered_ms":0,"max_single_water_ms":5000,"max_daily_water_ms":30000,"wet_reject_percent":75.0,"soil_moisture_raw":464,"soil_moisture_percent":3.7,"is_wet":false}
+{"status":"ok","command":"read","soil_moisture_raw":152,"soil_moisture_percent":100.0,"is_wet":true}
+{"status":"rejected_by_safety","command":"water","reason":"soil_too_wet","moisture_before_percent":100.0,"requested_duration_ms":300,"actual_duration_ms":0,"daily_watered_ms":300,"dry_run":false,"message":"rejected"}
+{"status":"ok","command":"water","moisture_before_percent":3.2,"moisture_after_percent":3.2,"requested_duration_ms":100000,"actual_duration_ms":5000,"applied_limit":true,"dry_run":false,"message":"watered_with_limit"}
 ```
 
 ## wet拒否確認
@@ -92,6 +101,6 @@
 
 - 水道接続
 - 流量測定
-- Raspberry Pi連携
 - MOSFETモジュールの発熱確認
 - 12V電源の異常有無確認
+- Raspberry Pi からの長時間連続運用確認

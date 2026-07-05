@@ -1,6 +1,6 @@
 # 現在の実装状況
 
-最終更新: 2026-06-25
+最終更新: 2026-07-05
 対象リポジトリ: komatsuna-ai-agent
 
 ## 1. 全体方針の再確認
@@ -22,14 +22,12 @@
 - 実装済み
   - Arduino `edge/arduino/valve_controller/` の安全制御ファームウェア
   - Arduino 実機の dry-run と MOSFET 経由の電磁バルブ単体動作確認
-  - Raspberry Pi 側のディレクトリ構成、依存関係、設定ファイル、systemd 雛形
+  - Raspberry Pi 側の観測基盤初期実装、実機デプロイ、systemd timer 有効化
   - Cloud Run `agent-api` の FastAPI エントリポイントと `GET /health`
   - Terraform の dev/prod 雛形
 - 一部のみ存在
-  - Raspberry Pi 側の Arduino 通信、スケジューラ、GCP 同期、カメラ処理はファイルはあるが TODO
   - `agent-api` の `/judge`、`/watering/effect/analyze`、改善・日次サマリー・エクスポートはルーター名とファイルはあるが実装未完了
 - 未実装
-  - Raspberry Pi のローカル JSONL 保存
   - AI 判断に基づく自動水やり実行
   - 水やり後のローカル高頻度測定の実装
   - Firestore / GCS / Vertex AI 実接続
@@ -76,7 +74,7 @@
 | `SOIL_MOISTURE_PIN` | `A0` |
 | `TEST_LED_PIN` | `LED_BUILTIN` |
 | `VALVE_ACTIVE_HIGH` | `true` |
-| `DRY_RUN_MODE` | `true` |
+| `DRY_RUN_MODE` | `true`（repo 既定値） |
 | `SOIL_SENSOR_DRY_RAW` | `472` |
 | `SOIL_SENSOR_WET_RAW` | `256` |
 | `WET_REJECT_PERCENT` | `75.0` |
@@ -94,6 +92,9 @@
 - dry-run `water 500`: 確認済み
 - dry-run `water 100000`: `actual_duration_ms=5000` に切り詰め確認済み
 - `DRY_RUN_MODE=false` での実機モード確認: 済み
+- Raspberry Pi からの `status/read/close/water 300/water 100000` 確認: 済み
+- 湿潤状態での `soil_too_wet` 拒否確認: 済み
+- 乾燥・湿潤でのセンサー値変化確認: 済み
 - MOSFET モジュール経由の電磁バルブ動作確認: 済み
 - 電磁バルブの「カチッ」確認: ユーザー確認済み
 - `close` 確認: 毎回 `valve_open=false`
@@ -102,17 +103,16 @@
 - `water` 単体の扱い: `unknown_command`
 - `water abc` の扱い: `invalid_duration_ms`
 - wet 拒否確認
-  - 元の `WET_REJECT_PERCENT=75.0` では未校正値のため拒否せず
-  - テスト目的で一時的に `WET_REJECT_PERCENT=30.0` に下げると `soil_too_wet` を確認
+  - 元の `WET_REJECT_PERCENT=75.0` で、湿潤時 `soil_moisture_percent=100.0` により `soil_too_wet` を確認
 - 水道接続: 未実施
 - 流量測定: 未実施
 
 代表レスポンス:
 
 ```json
-{"status":"ok","command":"status","uptime_ms":17911,"valve_open":false,"dry_run":true,"daily_watered_ms":0,"max_single_water_ms":5000,"max_daily_water_ms":30000,"wet_reject_percent":75.0,"soil_moisture_raw":472,"soil_moisture_percent":0.0,"is_wet":false}
-{"status":"ok","command":"water","moisture_before_percent":0.0,"moisture_after_percent":0.5,"requested_duration_ms":100000,"actual_duration_ms":5000,"applied_limit":true,"dry_run":false,"message":"watered_with_limit"}
-{"status":"rejected_by_safety","command":"water","reason":"soil_too_wet","moisture_before_percent":30.6,"requested_duration_ms":500,"actual_duration_ms":0,"dry_run":false,"message":"rejected"}
+{"status":"ok","command":"status","uptime_ms":106382,"valve_open":false,"dry_run":false,"daily_watered_ms":0,"max_single_water_ms":5000,"max_daily_water_ms":30000,"wet_reject_percent":75.0,"soil_moisture_raw":464,"soil_moisture_percent":3.7,"is_wet":false}
+{"status":"ok","command":"water","moisture_before_percent":3.2,"moisture_after_percent":3.2,"requested_duration_ms":100000,"actual_duration_ms":5000,"applied_limit":true,"dry_run":false,"message":"watered_with_limit"}
+{"status":"rejected_by_safety","command":"water","reason":"soil_too_wet","moisture_before_percent":100.0,"requested_duration_ms":300,"actual_duration_ms":0,"daily_watered_ms":300,"dry_run":false,"message":"rejected"}
 ```
 
 ### 3.4 未確認・未実施項目
@@ -141,25 +141,29 @@
 
 ### 4.1 実装済み機能
 
-- ディレクトリとモジュール雛形は存在
+- 実装ディレクトリ
   - `app/`
   - `app/arduino/`
   - `app/camera/`
   - `app/gcp/`
+  - `app/models/`
   - `app/scheduler/`
+  - `app/storage/`
   - `scripts/`
   - `systemd/`
-- 依存関係ファイルあり
+- 依存関係ファイル
   - `pyserial`
   - `google-cloud-firestore`
   - `google-cloud-storage`
   - `requests`
   - `Pillow`
+  - `pytest`
 - 設定ファイルあり
   - `ARDUINO_SERIAL_PORT=/dev/ttyACM0`
   - `ARDUINO_BAUD_RATE=115200`
-  - GCP / API URL 用の環境変数定義あり
-- systemd service/timer の雛形あり
+  - `ALLOW_WATER_COMMAND_FROM_PI=false`
+  - `DRY_RUN_MODE=true`（Pi `.env` では実機観測時に `false` を使用）
+- systemd service/timer を Pi 実機へ配置して有効化済み
 
 ### 4.2 実装済み機能
 
@@ -188,7 +192,9 @@
 
 - Raspberry Pi 側は「観測基盤の初期実装」まで完了
 - dry-run での 1 サイクル観測、JSONL 保存、画像生成、ローカルキュー退避を確認済み
-- GCP 実接続と Pi 実機デプロイは次段階
+- Pi 実機で `python -m app.main once`、Arduino 通信、JSONL 保存、systemd timer を確認済み
+- Pi カメラは `rpicam-still` 経由で実撮影を確認済み
+- GCP 実接続は次段階
 
 ## 5. GCP / Cloud Run / Firestore / GCS 実装状況
 
@@ -241,12 +247,12 @@
 - 実装済み
   - Arduino の JSON 契約は存在
   - 実機テストログは [TEST_LOG.md](/home/kansei/AI/ziyukenkyu2026/edge/arduino/valve_controller/TEST_LOG.md) に記録済み
-- 未実装
-  - Raspberry Pi からのローカル蓄積
-  - Firestore への保存
-  - GCS への画像保存
-  - AI 判断結果の永続化
-  - 水やり後効果測定の継続保存
+- 実装済み
+  - Raspberry Pi からのローカル JSONL 蓄積
+- Firestore への保存
+- GCS への画像保存
+- AI 判断結果の永続化
+- 水やり後効果測定の継続保存
 
 ## 8. 現在の実機テスト結果
 
@@ -254,13 +260,14 @@
   - Arduino コンパイル成功
   - Arduino 書き込み成功
   - dry-run `status/read/water 500/close/water 100000` を確認
-  - 実機モードで `water 300/500/1000/100000` と `close` を確認
+  - 実機モードで `water 300` と `water 100000`、`close` を確認
   - 電磁バルブは `water` 実行時だけ「カチッ」と動作
   - `water 100000` は `5000ms` へ切り詰め
-  - `abc` は `unknown_command`
-  - `water` 単体は `unknown_command`
-  - `water abc` は `invalid_duration_ms`
-  - wet 拒否は元の閾値では未成立、一時閾値変更で成立確認
+  - 湿潤状態では `soil_too_wet` により `water 300` を拒否
+  - センサーは乾燥時 `1.4-3.7%`、湿潤時 `100.0%` を記録
+  - Pi 実機で `python -m app.main once` が成功し、`observations.jsonl` と `soil_moisture_readings.jsonl` に追記
+  - Pi カメラは `rpicam-still` で実画像を保存
+  - `komatsuna-agent.timer` は有効化済み
 - 未テスト
   - 水道接続後の通水試験
   - 流量測定
@@ -273,28 +280,28 @@
 | -- | ---- | ----- | -- | -- |
 | Arduinoが水やり判断をしない | 実行可否だけを判定 | `water` の安全判定のみ実装 | OK | 自動判断ロジックはない |
 | 乾燥値だけで自動水やりしない | 定期観測と判断を分離 | Arduino 単体では自動通水なし | OK | Pi 側自動化は未実装 |
-| wet時はArduinoが拒否する | wet 閾値以上で拒否 | 実装あり、実機で一時閾値変更により確認 | OK | 本番閾値は未校正 |
+| wet時はArduinoが拒否する | wet 閾値以上で拒否 | 実装あり、実機で `soil_too_wet` を確認 | OK | 本番閾値は未校正 |
 | 単回最大開放時間がある | 上限強制 | `5000ms` 上限あり | OK | 実機確認済み |
 | 1日累積上限がある | 日次上限強制 | `30000ms` 実装あり | OK | 実機未確認 |
 | 起動時・異常時に閉じる | 閉側へ倒す | boot で `closeValve()` 実装 | OK | USB 抜去等は未テスト |
-| Raspberry Piはまず観測係である | 観測・通信・スケジュール担当 | 骨格のみ、実処理未実装 | 未実装 | 設計違反ではない |
+| Raspberry Piはまず観測係である | 観測・通信・スケジュール担当 | 観測基盤を実装し実機確認済み | OK | 自動水やり経路は未実装 |
 | AI判断は朝・夕方のみの想定 | decision window のみ | ドキュメントでは明記、実装未着手 | 未実装 | 実装時に要維持 |
 | 人間側データを保存しない | システム外管理 | ドキュメント上は維持 | OK | human_task 系は将来用として未使用に固定する |
 | 水道接続前に安全確認する | 先に dry-run / 電気試験 | 実機手順どおり実施 | OK | 水道接続は未実施 |
 | GCP/AIは未実装なら未実装として扱う | 過大主張しない | 現状は雛形中心 | OK | `/health` 以外は未完成 |
-| Raspberry Pi 初期実装は観測基盤に限定する | 観測・通信・ローカル保存を先行 | 実装は未着手 | 未実装 | `water` 自動実行は初期スコープ外 |
+| Raspberry Pi 初期実装は観測基盤に限定する | 観測・通信・ローカル保存を先行 | 実装・実機確認済み | OK | `water` 自動実行は初期スコープ外 |
 
 ## 10. 現時点のリスク・注意点
 
 - 土壌水分センサー校正値は暫定であり、実土壌で再校正が必要
 - 水道接続前に流量調整バルブと手動バルブが必要
 - 流量測定は未実施
-- Raspberry Pi 実装前は定期観測は未実施
+- Raspberry Pi の定期観測 timer は有効化済み
 - AI 判断前は自動水やり判断は未実装
 - 12V 系と Arduino 5V 系の混同に注意
 - 緊急時は手動バルブと 12V 電源遮断が優先
-- `DRY_RUN_MODE=true` が現在値なので、実機再試験時は意図せず実バルブが動かない可能性に注意
-- `ALLOW_WATER_COMMAND_FROM_PI` はまだ未実装であり、Pi 実装時に既定無効で追加する必要がある
+- repo 既定値の `DRY_RUN_MODE=true` と、実機試験時の書き込み設定 `dry_run=false` を混同しないよう注意
+- `ALLOW_WATER_COMMAND_FROM_PI=false` は実装済みで、Pi `.env` でも維持している
 - `tools/attach_arduino_usb.sh` は WSL2 用の補助スクリプト修正が入っている
 
 ## 11. 次に実装すべきこと
