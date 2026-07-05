@@ -27,14 +27,14 @@ def capture_image(settings: Settings, observed_at: datetime) -> Optional[Path]:
         return create_mock_image(image_dir, observed_at)
 
     file_path = image_dir / f"{observed_at.strftime('%Y%m%d_%H%M%S')}.jpg"
-    libcamera_still = shutil.which("libcamera-still")
-    if libcamera_still is None:
-        logger.warning("libcamera-still not available; falling back to mock image")
+    capture_command = shutil.which("libcamera-still") or shutil.which("rpicam-still")
+    if capture_command is None:
+        logger.warning("No Raspberry Pi camera CLI found; falling back to mock image")
         return create_mock_image(image_dir, observed_at)
 
     try:
         subprocess.run(
-            [libcamera_still, "-n", "-o", str(file_path)],
+            [capture_command, "-n", "-o", str(file_path)],
             check=True,
             capture_output=True,
             text=True,
