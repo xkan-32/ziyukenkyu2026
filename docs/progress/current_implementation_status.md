@@ -14,8 +14,9 @@
 - 判断
   - ドキュメント上の設計思想は一貫している
   - 現時点で実装が最も進んでいるのは Arduino
-  - Raspberry Pi / GCP / AI は多くが骨格またはプレースホルダー段階
-  - 次フェーズは Raspberry Pi 観測基盤の初期実装であり、自動散水本番化はまだ次段階
+  - Arduino と Raspberry Pi 観測基盤は実機確認まで進んだ
+  - GCP / AI は多くが骨格またはプレースホルダー段階
+  - 自動散水本番化はまだ次段階
 
 ## 2. 現在の実装範囲
 
@@ -247,12 +248,12 @@
 - 実装済み
   - Arduino の JSON 契約は存在
   - 実機テストログは [TEST_LOG.md](/home/kansei/AI/ziyukenkyu2026/edge/arduino/valve_controller/TEST_LOG.md) に記録済み
-- 実装済み
   - Raspberry Pi からのローカル JSONL 蓄積
-- Firestore への保存
-- GCS への画像保存
-- AI 判断結果の永続化
-- 水やり後効果測定の継続保存
+- 未実装
+  - Firestore への保存
+  - GCS への画像保存
+  - AI 判断結果の永続化
+  - 水やり後効果測定の継続保存
 
 ## 8. 現在の実機テスト結果
 
@@ -304,29 +305,17 @@
 - `ALLOW_WATER_COMMAND_FROM_PI=false` は実装済みで、Pi `.env` でも維持している
 - `tools/attach_arduino_usb.sh` は WSL2 用の補助スクリプト修正が入っている
 
-## 11. 次に実装すべきこと
+## 11. 次に進めるべきこと
 
-1. Raspberry Pi から Arduino への USB シリアル通信
-   - 現状: ファイルはあるが未実装
-2. `read/status/close` の Python クライアント
-   - 現状: 未実装
-3. ローカル JSONL 保存
-   - 現状: 未実装、対象ファイルも未作成
-4. カメラ撮影・リサイズ
-   - 現状: TODO
-5. 定期観測スケジューラ
-   - 現状: TODO
-6. GCP 送信失敗時のローカル退避と再送キュー
-   - 現状: 設計のみ
-7. `ALLOW_WATER_COMMAND_FROM_PI=false` を既定とする安全フラグ追加
-   - 現状: 未実装
-8. 流量測定
-   - 現状: 未実施
-9. GCP 最小構成
-   - 現状: FastAPI `/health` と Terraform 雛形のみ
-10. AI 判断 API
-   - 現状: ルーター雛形のみ
-11. AI 判断に基づく水やり実行の解禁条件整理
-   - 現状: 校正・安全試験が未完了のため着手しても本番無効の前提
-12. 水やり後の効果測定
-   - 現状: 設計のみ、スケジューラ TODO
+1. 土壌水分センサーの実土壌校正
+   - `SOIL_SENSOR_DRY_RAW` / `SOIL_SENSOR_WET_RAW` と `WET_REJECT_PERCENT` は暫定値のため、実運用前に校正が必要
+2. 流量測定
+   - `water 300` と `water 5000` の時間制御は確認済みだが、mL 換算のための流量データが未取得
+3. GCP 最小構成
+   - Firestore / GCS / 認証設定を用意し、現在のローカルキュー退避を実同期へつなぐ
+4. AI 判断 API
+   - `/judge` と判断ログ保存は未実装で、現状は観測専用運用
+5. 水やり後の効果測定
+   - `post_watering_scheduler.py` と `soil_moisture_readings` の高頻度運用は未実装
+6. 自動散水解禁前の安全試験
+   - USB 抜去、Pi 停止、電源断、`daily_limit_exceeded`、発熱確認、水道未接続での異常試験が残っている
